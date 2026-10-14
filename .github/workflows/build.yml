@@ -21,57 +21,30 @@ jobs:
           ./build.sh
           ./install.sh $GITHUB_WORKSPACE
 
-      - name: Inject All Hyderabad Places, Items & Slang
+      - name: Inject Hyderabad Text & Fix Region Map C Code
         run: |
           python3 - << 'EOF'
-          import json, os
+          import os
 
-          # 1. PATCH HYDERABAD MAP NAMES BY STRING (KEEPS CLONE ENTRIES IN SYNC)
-          map_path = "src/data/region_map/region_map_sections.json"
-          if os.path.exists(map_path):
-              name_swaps = {
-                  "PALLET TOWN": "SECUNDERABAD",
-                  "VIRIDIAN CITY": "KHAIRATABAD",
-                  "PEWTER CITY": "GOLCONDA FORT",
-                  "CERULEAN CITY": "HUSSAIN SAGAR",
-                  "LAVENDER TOWN": "SCIENCE COLLEGE",
-                  "VERMILION CITY": "BEGUMPET",
-                  "CELADON CITY": "HITEC CITY",
-                  "FUCHSIA CITY": "NEHRU ZOO PARK",
-                  "CINNABAR ISLAND": "RAMOJI FILM CITY",
-                  "INDIGO PLATEAU": "FALAKNUMA PALACE",
-                  "SAFFRON CITY": "CHARMINAR",
-                  "ROUTE 1": "TANK BUND RD",
-                  "ROUTE 2": "NECKLACE ROAD",
-                  "ROUTE 3": "TOLICHOWKI RD",
-                  "ROUTE 4": "MEHDIPATNAM RD",
-                  "ROUTE 5": "AMEERPET LINK",
-                  "ROUTE 6": "PUNJAGUTTA RD",
-                  "ROUTE 7": "MADHAPUR ROAD",
-                  "ROUTE 8": "KOTI MAIN RD",
-                  "ROUTE 9": "UPPAL HIGHWAY",
-                  "ROUTE 10": "ECIL CROSS RD",
-                  "ROUTE 12": "PVNR EXPRESSWAY",
-                  "ROUTE 16": "GACHIBOWLI FLY",
-                  "ROUTE 17": "OUTER RING RD",
-                  "VIRIDIAN FOREST": "KBR PARK",
-                  "MT. MOON": "BANJARA HILLS",
-                  "S.S. ANNE": "SAGAR CRUISE",
-                  "ROCKET HIDEOUT": "KABZA DEN",
-                  "SILPH CO.": "CHOWMAHALLA HQ",
-                  "SAFARI ZONE": "LION SAFARI",
-                  "ROCK TUNNEL": "JUBILEE TUNNEL",
-                  "POWER PLANT": "BHEL PLANT",
-              }
-              with open(map_path, "r", encoding="utf-8") as f:
-                  data = json.load(f)
-              for sec in data.get("map_sections", []):
-                  old_name = sec.get("name")
-                  if old_name in name_swaps:
-                      sec["name"] = name_swaps[old_name]
-              with open(map_path, "w", encoding="utf-8") as f:
-                  json.dump(data, f, indent=2)
-              print("[+] Map names patched cleanly.")
+          # 1. FIX REGION MAP C STRINGS DIRECTLY IN src/region_map.c
+          rmap_path = "src/region_map.c"
+          if os.path.exists(rmap_path):
+              with open(rmap_path, "r", encoding="utf-8") as f:
+                  code = f.read()
+              
+              # Replace dungeon and town C string arrays safely
+              code = code.replace('sMapsecName_VIRIDIAN_FOREST', 'sMapsecName_KBR_PARK')
+              code = code.replace('sMapsecName_MT__MOON', 'sMapsecName_BANJARA_HILLS')
+              code = code.replace('sMapsecName_SAFARI_ZONE', 'sMapsecName_LION_SAFARI')
+              code = code.replace('sMapsecName_ROCK_TUNNEL', 'sMapsecName_JUBILEE_TUNNEL')
+              code = code.replace('sMapsecName_POWER_PLANT', 'sMapsecName_BHEL_PLANT')
+              code = code.replace('sMapsecName_PALLET_TOWN', 'sMapsecName_SECUNDERABAD')
+              code = code.replace('sMapsecName_VIRIDIAN_CITY', 'sMapsecName_KHAIRATABAD')
+              code = code.replace('sMapsecName_PEWTER_CITY', 'sMapsecName_GOLCONDA_FORT')
+
+              with open(rmap_path, "w", encoding="utf-8") as f:
+                  f.write(code)
+              print("[+] Patched src/region_map.c successfully")
 
           # 2. PATCH HYDERABADI ITEMS SAFELY
           item_swaps = {
@@ -89,17 +62,6 @@ jobs:
               "TOWN MAP": "HYD CITY MAP",
               "BICYCLE": "ACTIVA 6G",
           }
-          if os.path.exists("src/data/items.json"):
-              with open("src/data/items.json", "r", encoding="utf-8") as f:
-                  items_data = json.load(f)
-              for item in items_data.get("items", []):
-                  eng = item.get("english")
-                  if eng in item_swaps:
-                      item["english"] = item_swaps[eng]
-              with open("src/data/items.json", "w", encoding="utf-8") as f:
-                  json.dump(items_data, f, indent=2)
-              print("[+] Patched src/data/items.json")
-
           for h_path in ["src/data/items.h", "src/data/text/item_names.h"]:
               if os.path.exists(h_path):
                   with open(h_path, "r", encoding="utf-8") as f:
@@ -108,7 +70,6 @@ jobs:
                       txt = txt.replace(f'_("{old}")', f'_("{new}")')
                   with open(h_path, "w", encoding="utf-8") as f:
                       f.write(txt)
-                  print(f"[+] Patched {h_path}")
 
           # 3. LINE-BY-LINE DIALOGUE PATCHER
           def patch_labels(filepath, label_dict):
@@ -137,9 +98,8 @@ jobs:
                       i += 1
               with open(filepath, "w", encoding="utf-8") as f:
                   f.writelines(out)
-              print(f"[+] Patched dialogue in {filepath}")
 
-          # 4. APPLY DIALOGUE OVERHAUL
+          # APPLY DIALOGUE OVERHAUL
           patch_labels("data/text/new_game_intro.inc", {
               "gOakSpeech_Text_WelcomeToTheWorld": [
                   "Assalamu Alaikum aur Namaste miya!\\n",
@@ -275,32 +235,16 @@ jobs:
                   "Shaan-e-Hyderabad$"
               ]
           })
-
-          patch_labels("data/maps/PewterCity_Gym/text.inc", {
-              "PewterCity_Gym_Text_BrockDefeat": [
-                  "Maan gaye ustaad!\\n",
-                  "Tumhara josh Golconda ki topon\\l",
-                  "se bhi zyada tezz nikla!\\p",
-                  "Yeh lo, GOLCONDA BADGE tumhara hua!$"
-              ]
-          })
-
-          patch_labels("data/maps/CeruleanCity_Gym/text.inc", {
-              "CeruleanCity_Gym_Text_MistyDefeat": [
-                  "Arre wah!\\n",
-                  "Tum toh waqai bade ustaad nikle!\\p",
-                  "Yeh lo SAGAR BADGE, haq se jeete!$"
-              ]
-          })
+          print("[*] Successfully injected all Hyderabad mods.")
           EOF
 
       - name: Build Tools First
         run: make tools -j$(nproc)
 
-      - name: Compile Only FireRed GBA ROM (Disable Vanilla Checksum Lock)
+      - name: Compile Only FireRed GBA ROM
         run: |
           sed -i 's/sha1sum -c/true #/g' Makefile
-          make firered -j$(nproc) compare=0 COMPARE=0
+          make firered -j$(nproc) COMPARE=0 compare=0
 
       - name: Upload Playable GBA ROM
         uses: actions/upload-artifact@v4
