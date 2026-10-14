@@ -1,104 +1,290 @@
-name: CI
+name: Build Pokemon FireRed Hyderabad Edition
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-hyderabad-rom:
     runs-on: ubuntu-latest
-    env:
-      GAME_VERSION: FIRERED
-      GAME_LANGUAGE: ENGLISH
-      GAME_REVISION: 0
-      MODERN: 0
-      COMPARE: 1
     steps:
-      - name: Checkout
-        uses: actions/checkout@master
-
-      - name: Checkout agbcc
-        uses: actions/checkout@master
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
-          path: 'agbcc'
-          repository: 'pret/agbcc'
+          submodules: recursive
 
-      - name: Checkout symbols
-        if: ${{ github.event_name == 'push' }}
-        uses: actions/checkout@master
-        with:
-          path: 'symbols'
-          ref: 'symbols'
-
-      - name: Install binutils
+      - name: Install GBA Compiler Tools
         run: |
-          sudo apt update
-          sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi libpng-dev
-        # build-essential and git are already installed
-        # gcc-arm-none-eabi is only needed for the modern build
-        # as an alternative to dkP
-
-      - name: Install agbcc
-        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils-arm-none-eabi git libpng-dev python3
+          git clone https://github.com/pret/agbcc.git /tmp/agbcc
+          cd /tmp/agbcc
           ./build.sh
-          ./install.sh ../
-        working-directory: ./agbcc
+          ./install.sh $GITHUB_WORKSPACE
 
-      - name: Compare FireRed
+      - name: Inject All Hyderabad Places, Items & Slang
         run: |
-          make -j${nproc} all syms
+          python3 - << 'EOF'
+          import json, os, re
 
-      - name: Compare FireRed rev1
-        env:
-          GAME_REVISION: 1
-        run: |
-          make -j${nproc} all syms
+          # 1. PATCH HYDERABAD MAP NAMES
+          map_path = "src/data/region_map/region_map_sections.json"
+          if os.path.exists(map_path):
+              replacements = {
+                  "MAPSEC_PALLET_TOWN": "SECUNDERABAD",
+                  "MAPSEC_VIRIDIAN_CITY": "KHAIRATABAD",
+                  "MAPSEC_PEWTER_CITY": "GOLCONDA FORT",
+                  "MAPSEC_CERULEAN_CITY": "HUSSAIN SAGAR",
+                  "MAPSEC_LAVENDER_TOWN": "SCIENCE COLLEGE",
+                  "MAPSEC_VERMILION_CITY": "BEGUMPET",
+                  "MAPSEC_CELADON_CITY": "HITEC CITY",
+                  "MAPSEC_FUCHSIA_CITY": "NEHRU ZOO PARK",
+                  "MAPSEC_CINNABAR_ISLAND": "RAMOJI FILM CITY",
+                  "MAPSEC_INDIGO_PLATEAU": "FALAKNUMA PALACE",
+                  "MAPSEC_SAFFRON_CITY": "CHARMINAR",
+                  "MAPSEC_ROUTE_1": "TANK BUND RD",
+                  "MAPSEC_ROUTE_2": "NECKLACE ROAD",
+                  "MAPSEC_ROUTE_3": "TOLICHOWKI RD",
+                  "MAPSEC_ROUTE_4": "MEHDIPATNAM RD",
+                  "MAPSEC_ROUTE_5": "AMEERPET LINK",
+                  "MAPSEC_ROUTE_6": "PUNJAGUTTA RD",
+                  "MAPSEC_ROUTE_7": "MADHAPUR ROAD",
+                  "MAPSEC_ROUTE_8": "KOTI MAIN RD",
+                  "MAPSEC_ROUTE_9": "UPPAL HIGHWAY",
+                  "MAPSEC_ROUTE_10": "ECIL CROSS RD",
+                  "MAPSEC_ROUTE_12": "PVNR EXPRESSWAY",
+                  "MAPSEC_ROUTE_16": "GACHIBOWLI FLY",
+                  "MAPSEC_ROUTE_17": "OUTER RING RD",
+                  "MAPSEC_VIRIDIAN_FOREST": "KBR PARK",
+                  "MAPSEC_MT_MOON": "BANJARA HILLS",
+                  "MAPSEC_S_S_ANNE": "SAGAR CRUISE",
+                  "MAPSEC_ROCKET_HIDEOUT": "KABZA DEN",
+                  "MAPSEC_SILPH_CO": "CHOWMAHALLA HQ",
+                  "MAPSEC_POKEMON_MANSION": "HAUNTED STUDIO",
+                  "MAPSEC_SAFARI_ZONE": "LION SAFARI",
+                  "MAPSEC_POKEMON_LEAGUE": "DECCAN LEAGUE",
+                  "MAPSEC_ROCK_TUNNEL": "JUBILEE TUNNEL",
+                  "MAPSEC_POWER_PLANT": "BHEL PLANT",
+                  "MAPSEC_POKEMON_TOWER": "OLD SCIENCE BLDG",
+              }
+              with open(map_path, "r", encoding="utf-8") as f:
+                  data = json.load(f)
+              for sec in data.get("map_sections", []):
+                  if sec.get("id") in replacements:
+                      sec["name"] = replacements[sec["id"]]
+              with open(map_path, "w", encoding="utf-8") as f:
+                  json.dump(data, f, indent=2)
 
-      - name: Compare FireRed rev10
-        env:
-          GAME_REVISION: 10
-        run: |
-          make -j${nproc} all syms
+          # 2. PATCH HYDERABADI ITEMS & TRAINER CLASSES SAFELY
+          item_files = ["src/data/items.json", "src/data/items.h", "src/data/text/item_names.h"]
+          item_swaps = {
+              '"POTION"': '"NIMBU PANI"',
+              '"SUPER POTION"': '"BADAM MILK"',
+              '"HYPER POTION"': '"MUTTON MARAG"',
+              '"MAX POTION"': '"SHAHI HALEEM"',
+              '"FULL RESTORE"': '"KACCHI DUM"',
+              '"REVIVE"': '"KADAK CHAI"',
+              '"FRESH WATER"': '"IRANI CHAI"',
+              '"SODA POP"': '"GOLI SODA"',
+              '"LEMONADE"': '"QUBANI SWEET"',
+              '"MOOMOO MILK"': '"DUM BIRYANI"',
+              '"LAVA COOKIE"': '"OSMANIA BISC"',
+              '"OAK\'S PARCEL"': '"CHAI PARCEL"',
+              '"TOWN MAP"': '"HYD CITY MAP"',
+              '"BICYCLE"': '"ACTIVA 6G"',
+          }
+          for path in item_files:
+              if os.path.exists(path):
+                  with open(path, "r", encoding="utf-8") as f:
+                      txt = f.read()
+                  for old, new in item_swaps.items():
+                      txt = txt.replace(old, new)
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(txt)
 
-      - name: Compare LeafGreen
-        env:
-          GAME_VERSION: LEAFGREEN
-        run: |
-          make -j${nproc} all syms
+          # 3. HELPER TO SAFELY PATCH DIALOGUE LABELS WITHOUT BREAKING ASM
+          def patch_labels(filepath, label_dict):
+              if not os.path.exists(filepath):
+                  return
+              with open(filepath, "r", encoding="utf-8") as f:
+                  content = f.read()
+              for label, lines in label_dict.items():
+                  formatted = f"{label}::\n" + "\n".join(f'    .string "{line}"' for line in lines)
+                  pattern = rf"^{re.escape(label)}::\s*\n(?:.*?\n)*?.*?\$"\s*$"
+                  content = re.sub(pattern, formatted, content, flags=re.MULTILINE)
+              with open(filepath, "w", encoding="utf-8") as f:
+                  f.write(content)
 
-      - name: Compare LeafGreen rev1
-        env:
-          GAME_VERSION: LEAFGREEN
-          GAME_REVISION: 1
-        run: |
-          make -j${nproc} all syms
+          # 4. PATCH PROF. OSMANI INTRO SPEECH
+          patch_labels("data/text/new_game_intro.inc", {
+              "gOakSpeech_Text_WelcomeToTheWorld": [
+                  "Assalamu Alaikum aur Namaste miya!\\n",
+                  "Hyderabad ke duniya mein khushamdeed!\\p",
+                  "Mera naam PROF. OSMANI hai.\\n",
+                  "Pura Secunderabad aur Old City\\l",
+                  "mereku POKéMON USTAAD bolta.\\p$"
+              ],
+              "gOakSpeech_Text_ThisWorld": [
+                  "Apne sheher mein Charminar se leke\\n",
+                  "Gachibowli tak har jagah POKéMON\\l",
+                  "bhare hue hain!$"
+              ],
+              "gOakSpeech_Text_InhabitedFarAndWide": [
+                  "Kuch log inlog ku shauk se paalte,\\n",
+                  "toh kuch log Barkas ke pehlwano\\l",
+                  "ke jaisa muqabla karate.\\p",
+                  "Aur apan? Apan Osmania Lab mein\\n",
+                  "baithke Irani Chai peete-peete\\l",
+                  "inpe research karte.\\p$"
+              ],
+              "gOakSpeech_Text_TellMeALittleAboutYourself": [
+                  "Chalo pehle tumhare baare mein\\n",
+                  "batao zara.\\p",
+                  "Tum patthe ho ya patthi?\\n",
+                  "Bolo miya?$"
+              ],
+              "gOakSpeech_Text_YourNameWhatIsIt": [
+                  "Pehle yeh batao, tumhara\\n",
+                  "shubh naam kya hai pasha?$"
+              ],
+              "gOakSpeech_Text_SoYourNameIsPlayer": [
+                  "Hau! Toh tumhara naam\\n",
+                  "{PLAYER} hai na? Kirrak naam hai!$"
+              ],
+              "gOakSpeech_Text_WhatWasHisName": [
+                  "Yeh mera pota hai.\\n",
+                  "Bachpan se tumhara sabse bada\\l",
+                  "rival aur ek number ka pheku hai.\\p",
+                  "...Arre baigan, iska naam\\n",
+                  "bhool gaya main! Kya tha bolo?$"
+              ],
+              "gOakSpeech_Text_RememberRivalsName": [
+                  "{PLAYER}!\\p",
+                  "Ab tumhara asli Hyderabadi\\n",
+                  "POKéMON dastan shuru hone wala hai!\\p",
+                  "Biryani khao, Chai piyo, aur\\n",
+                  "Falaknuma Palace ke Champion bano!\\l",
+                  "Chalo nikalte!$"
+              ]
+          })
 
-      - name: Compare LeafGreen rev10
-        env:
-          GAME_VERSION: LEAFGREEN
-          GAME_REVISION: 10
-        run: |
-          make -j${nproc} all syms
+          # 5. PATCH SECUNDERABAD (PALLET TOWN) & LAB
+          patch_labels("data/maps/PalletTown/text.inc", {
+              "PalletTown_Text_OakDontGoOut": [
+                  "PROF. OSMANI: Arre theruko miya!\\n",
+                  "Udhar mat jao! Rukho!$"
+              ],
+              "PalletTown_Text_OakGrassUnsafeNeedMon": [
+                  "PROF. OSMANI: Dimaag kharab hai kya?\\n",
+                  "Tank Bund ke ghaas mein jangli\\l",
+                  "POKéMON ghoomre! Baigan mein\\l",
+                  "mil jaate tum!\\p",
+                  "Mere saath aao, Osmania Lab mein\\n",
+                  "tumaku ek kirrak POKéMON detaun!$"
+              ],
+              "PalletTown_Text_RaisingMonsToo": [
+                  "Kya miya, kidhar nikalre?\\n",
+                  "Main bhi POKéMON paalru malum!\\p",
+                  "Ek baar inlog pehlwan ban gaye na,\\n",
+                  "Old City se HITEC City tak\\l",
+                  "kisi ke baap se nahi dartaun!$"
+              ],
+              "PalletTown_Text_TownSign": [
+                  "SECUNDERABAD\\n",
+                  "Jahan se har asli ustaad ka\\l",
+                  "safar shuru hota!$"
+              ],
+              "PalletTown_Text_OakPokemonResearchLab": [
+                  "OSMANIA POKéMON RESEARCH LAB\\n",
+                  "Chai peete, Research karte!$"
+              ]
+          })
 
-      - name: Build Modern
-        env:
-          MODERN: 1
-          COMPARE: 0
-        run: |
-          make -j${nproc} all
+          patch_labels("data/maps/PalletTown_ProfessorOaksLab/text.inc", {
+              "PalletTown_ProfessorOaksLab_Text_OakChooseOneMon": [
+                  "PROF. OSMANI: Sabar karo {RIVAL}!\\n",
+                  "Kaaiku itna uchalre?\\p",
+                  "Dekho {PLAYER}, table pe teen\\n",
+                  "POKé BALLS rakhe hue hain.\\p",
+                  "Ab mere paas bas yeh teen bache\\n",
+                  "hain. Tum ek chun lo ismein se!$"
+              ],
+              "PalletTown_ProfessorOaksLab_Text_RivalMyMonLooksTougher": [
+                  "{RIVAL}: Rukho {PLAYER}!\\n",
+                  "Aiseich nikal jaare kya?\\p",
+                  "Chalo abhi ke abhi ek muqabla\\n",
+                  "ho jaye! Dekhte kiska POKéMON\\l",
+                  "asli pehlwan hai! Aao maidan mein!$"
+              ],
+              "PalletTown_ProfessorOaksLab_Text_RivalDefeat": [
+                  "AYYO BAIGAN!\\n",
+                  "Yeh kaise ho gaya?!\\l",
+                  "Galat POKéMON utha liya kya main?!$"
+              ],
+              "PalletTown_ProfessorOaksLab_Text_RivalGoToughenMyMon": [
+                  "{RIVAL}: Jaando miya! Badluck tha,\\n",
+                  "warna tumaku dikha deta tha!\\p",
+                  "Abhi main Tank Bund pe jaake apne\\n",
+                  "POKéMON ko kadak banataun.\\p",
+                  "Chaltaun {PLAYER}! Dada, salam!$"
+              ]
+          })
 
-      - name: Move symfiles
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          cp *.sym symbols/
-          echo "SYMBOLS_COMMIT_MSG=$( git log --format=%s ${GITHUB_SHA} )" >> $GITHUB_ENV
+          # 6. PATCH ROUTE 1 (TANK BUND), KHAIRATABAD & ALL 8 GYM LEADERS
+          patch_labels("data/maps/Route1/text.inc", {
+              "Route1_Text_RouteSign": [
+                  "TANK BUND ROAD\\n",
+                  "SECUNDERABAD - KHAIRATABAD$"
+              ]
+          })
 
-      - name: Update symfiles
-        if: ${{ github.event_name == 'push' }}
-        uses: EndBug/add-and-commit@v7
+          patch_labels("data/maps/ViridianCity/text.inc", {
+              "ViridianCity_Text_GrandpaHasntHadCoffeeYet": [
+                  "UNCLE: Arre baigan! Subah se\\n",
+                  "Irani Chai nahi mili mereku!\\l",
+                  "Sar phatra mera! Aage nakko jao!\\p",
+                  "BAJI: Maaf karo bhaiya, Dada ko\\n",
+                  "jab tak subah ki Irani Chai aur\\l",
+                  "Osmania Biscuit nahi milti, ino\\l",
+                  "rasta roke baith jaate!$"
+              ],
+              "ViridianCity_Text_CitySign": [
+                  "KHAIRATABAD CHAURHA\\n",
+                  "Shaan-e-Hyderabad$"
+              ]
+          })
+
+          patch_labels("data/maps/PewterCity_Gym/text.inc", {
+              "PewterCity_Gym_Text_BrockIntro": [
+                  "Main QULI hoon!\\n",
+                  "Golconda Fort ka GYM USTAAD!\\p",
+                  "Yeh qile ke patthar 500 saal se\\n",
+                  "toofano ke aage datke khade hain,\\l",
+                  "aur mere ROCK POKéMON bhi!\\p",
+                  "Kya bolte patthe? Dum hai toh\\n",
+                  "tod ke dikhao mera defense!{PLAY_BGM}{MUS_ENCOUNTER_GYM_LEADER}$"
+              ]
+          })
+
+          patch_labels("data/maps/CeruleanCity_Gym/text.inc", {
+              "CeruleanCity_Gym_Text_MistyIntro": [
+                  "Hao, toh tum naye trainer ho?\\n",
+                  "Mera naam NILOUFER hai!\\p",
+                  "Hussain Sagar ke paani mein\\n",
+                  "mera all-out WATER offense chalta!\\p",
+                  "Agar sochre ke aasani se jeet\\n",
+                  "jaoge, toh duba ke rakh detiun!{PLAY_BGM}{MUS_ENCOUNTER_GYM_LEADER}$"
+              ]
+          })
+          print("Successfully patched Pokemon FireRed: Hyderabad Edition!")
+          EOF
+
+      - name: Compile GBA ROM
+        run: make -j$(nproc) COMPARE=0
+
+      - name: Upload Playable GBA ROM
+        uses: actions/upload-artifact@v4
         with:
-          branch: symbols
-          cwd: "./symbols"
-          add: "*.sym"
-          message: ${{ env.SYMBOLS_COMMIT_MSG }}
+          name: Pokemon-FireRed-Hyderabad-Edition
+          path: pokefirered.gba
+          
