@@ -7,25 +7,24 @@ on:
 jobs:
   build-hyderabad-rom:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install GBA Compiler Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential binutils-arm-none-eabi git libpng-dev python3
-          git clone https://github.com/pret/agbcc.git /tmp/agbcc
+          git clone --depth 1 https://github.com/pret/agbcc.git /tmp/agbcc
           cd /tmp/agbcc
           ./build.sh
           ./install.sh $GITHUB_WORKSPACE
 
-      - name: Inject All Hyderabad Places, Items & Slang
+      - name: Inject All Hyderabad Places, Items & Slang (Instant Line-by-Line)
         run: |
           python3 - << 'EOF'
-          import json, os, re
+          import json, os
 
           # 1. PATCH HYDERABAD MAP NAMES
           map_path = "src/data/region_map/region_map_sections.json"
@@ -74,8 +73,9 @@ jobs:
                       sec["name"] = replacements[sec["id"]]
               with open(map_path, "w", encoding="utf-8") as f:
                   json.dump(data, f, indent=2)
+              print("[+] Map names patched.")
 
-          # 2. PATCH HYDERABADI ITEMS & TRAINER CLASSES SAFELY
+          # 2. PATCH HYDERABADI ITEMS
           item_files = ["src/data/items.json", "src/data/items.h", "src/data/text/item_names.h"]
           item_swaps = {
               '"POTION"': '"NIMBU PANI"',
@@ -89,7 +89,6 @@ jobs:
               '"LEMONADE"': '"QUBANI SWEET"',
               '"MOOMOO MILK"': '"DUM BIRYANI"',
               '"LAVA COOKIE"': '"OSMANIA BISC"',
-              '"OAK\'S PARCEL"': '"CHAI PARCEL"',
               '"TOWN MAP"': '"HYD CITY MAP"',
               '"BICYCLE"': '"ACTIVA 6G"',
           }
@@ -101,33 +100,49 @@ jobs:
                       txt = txt.replace(old, new)
                   with open(path, "w", encoding="utf-8") as f:
                       f.write(txt)
+                  print(f"[+] Patched items in {path}")
 
-          # 3. HELPER TO SAFELY PATCH DIALOGUE LABELS WITHOUT BREAKING ASM
-                    def patch_labels(filepath, label_dict):
+          # 3. INSTANT LINE-BY-LINE DIALOGUE PATCHER (ZERO REGEX BACKTRACKING)
+          def patch_labels(filepath, label_dict):
               if not os.path.exists(filepath):
                   return
               with open(filepath, "r", encoding="utf-8") as f:
-                  content = f.read()
-              for label, lines in label_dict.items():
-                  formatted = f"{label}::\n" + "\n".join(f'    .string "{line}"' for line in lines)
-                  pattern = rf'^{re.escape(label)}::\s*\n(?:.*?\n)*?.*?\$"\s*$'
-                  content = re.sub(pattern, formatted, content, flags=re.MULTILINE)
+                  lines = f.readlines()
+              out = []
+              i = 0
+              while i < len(lines):
+                  stripped = lines[i].strip()
+                  matched = None
+                  for label in label_dict:
+                      if stripped in (label + ":", label + "::"):
+                          matched = label
+                          break
+                  if matched:
+                      out.append(lines[i])
+                      for s in label_dict[matched]:
+                          out.append(f'    .string "{s}"\n')
+                      i += 1
+                      while i < len(lines) and lines[i].strip().startswith(".string"):
+                          i += 1
+                  else:
+                      out.append(lines[i])
+                      i += 1
               with open(filepath, "w", encoding="utf-8") as f:
-                  f.write(content)
-                  
+                  f.writelines(out)
+              print(f"[+] Patched dialogue in {filepath}")
 
-          # 4. PATCH PROF. OSMANI INTRO SPEECH
+          # 4. APPLY DIALOGUE OVERHAUL
           patch_labels("data/text/new_game_intro.inc", {
               "gOakSpeech_Text_WelcomeToTheWorld": [
                   "Assalamu Alaikum aur Namaste miya!\\n",
                   "Hyderabad ke duniya mein khushamdeed!\\p",
                   "Mera naam PROF. OSMANI hai.\\n",
                   "Pura Secunderabad aur Old City\\l",
-                  "mereku POKéMON USTAAD bolte.\\p$"
+                  "mereku POKeMON USTAAD bolta.\\p$"
               ],
               "gOakSpeech_Text_ThisWorld": [
                   "Apne sheher mein Charminar se leke\\n",
-                  "Gachibowli tak har jagah POKéMON\\l",
+                  "Gachibowli tak har jagah POKeMON\\l",
                   "bhare hue hain!$"
               ],
               "gOakSpeech_Text_InhabitedFarAndWide": [
@@ -162,14 +177,13 @@ jobs:
               "gOakSpeech_Text_RememberRivalsName": [
                   "{PLAYER}!\\p",
                   "Ab tumhara asli Hyderabadi\\n",
-                  "POKéMON dastan shuru hone wala hai!\\p",
+                  "POKeMON dastan shuru hone wala hai!\\p",
                   "Biryani khao, Chai piyo, aur\\n",
                   "Falaknuma Palace ke Champion bano!\\l",
                   "Chalo nikalte!$"
               ]
           })
 
-          # 5. PATCH SECUNDERABAD (PALLET TOWN) & LAB
           patch_labels("data/maps/PalletTown/text.inc", {
               "PalletTown_Text_OakDontGoOut": [
                   "PROF. OSMANI: Arre theruko miya!\\n",
@@ -178,14 +192,14 @@ jobs:
               "PalletTown_Text_OakGrassUnsafeNeedMon": [
                   "PROF. OSMANI: Dimaag kharab hai kya?\\n",
                   "Tank Bund ke ghaas mein jangli\\l",
-                  "POKéMON ghoomre! Baigan mein\\l",
+                  "POKeMON ghoomre! Baigan mein\\l",
                   "mil jaate tum!\\p",
                   "Mere saath aao, Osmania Lab mein\\n",
-                  "tumaku ek kirrak POKéMON detaun!$"
+                  "tumaku ek kirrak POKeMON detaun!$"
               ],
               "PalletTown_Text_RaisingMonsToo": [
                   "Kya miya, kidhar nikalre?\\n",
-                  "Main bhi POKéMON paalru malum!\\p",
+                  "Main bhi POKeMON paalru malum!\\p",
                   "Ek baar inlog pehlwan ban gaye na,\\n",
                   "Old City se HITEC City tak\\l",
                   "kisi ke baap se nahi dartaun!$"
@@ -196,7 +210,7 @@ jobs:
                   "safar shuru hota!$"
               ],
               "PalletTown_Text_OakPokemonResearchLab": [
-                  "OSMANIA POKéMON RESEARCH LAB\\n",
+                  "OSMANIA POKeMON RESEARCH LAB\\n",
                   "Chai peete, Research karte!$"
               ]
           })
@@ -206,7 +220,7 @@ jobs:
                   "PROF. OSMANI: Sabar karo {RIVAL}!\\n",
                   "Kaaiku itna uchalre?\\p",
                   "Dekho {PLAYER}, table pe teen\\n",
-                  "POKé BALLS rakhe hue hain.\\p",
+                  "POKe BALLS rakhe hue hain.\\p",
                   "Ab mere paas bas yeh teen bache\\n",
                   "hain. Tum ek chun lo ismein se!$"
               ],
@@ -214,24 +228,23 @@ jobs:
                   "{RIVAL}: Rukho {PLAYER}!\\n",
                   "Aiseich nikal jaare kya?\\p",
                   "Chalo abhi ke abhi ek muqabla\\n",
-                  "ho jaye! Dekhte kiska POKéMON\\l",
+                  "ho jaye! Dekhte kiska POKeMON\\l",
                   "asli pehlwan hai! Aao maidan mein!$"
               ],
               "PalletTown_ProfessorOaksLab_Text_RivalDefeat": [
                   "AYYO BAIGAN!\\n",
                   "Yeh kaise ho gaya?!\\l",
-                  "Galat POKéMON utha liya kya main?!$"
+                  "Galat POKeMON utha liya kya main?!$"
               ],
               "PalletTown_ProfessorOaksLab_Text_RivalGoToughenMyMon": [
                   "{RIVAL}: Jaando miya! Badluck tha,\\n",
                   "warna tumaku dikha deta tha!\\p",
                   "Abhi main Tank Bund pe jaake apne\\n",
-                  "POKéMON ko kadak banataun.\\p",
+                  "POKeMON ko kadak banataun.\\p",
                   "Chaltaun {PLAYER}! Dada, salam!$"
               ]
           })
 
-          # 6. PATCH ROUTE 1 (TANK BUND), KHAIRATABAD & ALL 8 GYM LEADERS
           patch_labels("data/maps/Route1/text.inc", {
               "Route1_Text_RouteSign": [
                   "TANK BUND ROAD\\n",
@@ -256,32 +269,30 @@ jobs:
           })
 
           patch_labels("data/maps/PewterCity_Gym/text.inc", {
-              "PewterCity_Gym_Text_BrockIntro": [
-                  "Main QULI hoon!\\n",
-                  "Golconda Fort ka GYM USTAAD!\\p",
-                  "Yeh qile ke patthar 500 saal se\\n",
-                  "toofano ke aage datke khade hain,\\l",
-                  "aur mere ROCK POKéMON bhi!\\p",
-                  "Kya bolte patthe? Dum hai toh\\n",
-                  "tod ke dikhao mera defense!{PLAY_BGM}{MUS_ENCOUNTER_GYM_LEADER}$"
+              "PewterCity_Gym_Text_BrockDefeat": [
+                  "Maan gaye ustaad!\\n",
+                  "Tumhara josh Golconda ki topon\\l",
+                  "se bhi zyada tezz nikla!\\p",
+                  "Yeh lo, GOLCONDA BADGE tumhara hua!$"
               ]
           })
 
           patch_labels("data/maps/CeruleanCity_Gym/text.inc", {
-              "CeruleanCity_Gym_Text_MistyIntro": [
-                  "Hao, toh tum naye trainer ho?\\n",
-                  "Mera naam NILOUFER hai!\\p",
-                  "Hussain Sagar ke paani mein\\n",
-                  "mera all-out WATER offense chalta!\\p",
-                  "Agar sochre ke aasani se jeet\\n",
-                  "jaoge, toh duba ke rakh detiun!{PLAY_BGM}{MUS_ENCOUNTER_GYM_LEADER}$"
+              "CeruleanCity_Gym_Text_MistyDefeat": [
+                  "Arre wah!\\n",
+                  "Tum toh waqai bade ustaad nikle!\\p",
+                  "Yeh lo SAGAR BADGE, haq se jeete!$"
               ]
           })
-          print("Successfully patched Pokemon FireRed: Hyderabad Edition!")
+
+          print("[*] All Hyderabad patches applied in <1 second!")
           EOF
 
-      - name: Compile GBA ROM
-        run: make -j$(nproc) COMPARE=0
+      - name: Build Tools First
+        run: make tools -j$(nproc)
+
+      - name: Compile Only FireRed GBA ROM
+        run: make firered -j$(nproc) COMPARE=0
 
       - name: Upload Playable GBA ROM
         uses: actions/upload-artifact@v4
