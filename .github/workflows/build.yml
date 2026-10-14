@@ -21,88 +21,96 @@ jobs:
           ./build.sh
           ./install.sh $GITHUB_WORKSPACE
 
-      - name: Inject All Hyderabad Places, Items & Slang (Instant Line-by-Line)
+      - name: Inject All Hyderabad Places, Items & Slang
         run: |
           python3 - << 'EOF'
           import json, os
 
-          # 1. PATCH HYDERABAD MAP NAMES
+          # 1. PATCH HYDERABAD MAP NAMES BY STRING (KEEPS CLONE ENTRIES IN SYNC)
           map_path = "src/data/region_map/region_map_sections.json"
           if os.path.exists(map_path):
-              replacements = {
-                  "MAPSEC_PALLET_TOWN": "SECUNDERABAD",
-                  "MAPSEC_VIRIDIAN_CITY": "KHAIRATABAD",
-                  "MAPSEC_PEWTER_CITY": "GOLCONDA FORT",
-                  "MAPSEC_CERULEAN_CITY": "HUSSAIN SAGAR",
-                  "MAPSEC_LAVENDER_TOWN": "SCIENCE COLLEGE",
-                  "MAPSEC_VERMILION_CITY": "BEGUMPET",
-                  "MAPSEC_CELADON_CITY": "HITEC CITY",
-                  "MAPSEC_FUCHSIA_CITY": "NEHRU ZOO PARK",
-                  "MAPSEC_CINNABAR_ISLAND": "RAMOJI FILM CITY",
-                  "MAPSEC_INDIGO_PLATEAU": "FALAKNUMA PALACE",
-                  "MAPSEC_SAFFRON_CITY": "CHARMINAR",
-                  "MAPSEC_ROUTE_1": "TANK BUND RD",
-                  "MAPSEC_ROUTE_2": "NECKLACE ROAD",
-                  "MAPSEC_ROUTE_3": "TOLICHOWKI RD",
-                  "MAPSEC_ROUTE_4": "MEHDIPATNAM RD",
-                  "MAPSEC_ROUTE_5": "AMEERPET LINK",
-                  "MAPSEC_ROUTE_6": "PUNJAGUTTA RD",
-                  "MAPSEC_ROUTE_7": "MADHAPUR ROAD",
-                  "MAPSEC_ROUTE_8": "KOTI MAIN RD",
-                  "MAPSEC_ROUTE_9": "UPPAL HIGHWAY",
-                  "MAPSEC_ROUTE_10": "ECIL CROSS RD",
-                  "MAPSEC_ROUTE_12": "PVNR EXPRESSWAY",
-                  "MAPSEC_ROUTE_16": "GACHIBOWLI FLY",
-                  "MAPSEC_ROUTE_17": "OUTER RING RD",
-                  "MAPSEC_VIRIDIAN_FOREST": "KBR PARK",
-                  "MAPSEC_MT_MOON": "BANJARA HILLS",
-                  "MAPSEC_S_S_ANNE": "SAGAR CRUISE",
-                  "MAPSEC_ROCKET_HIDEOUT": "KABZA DEN",
-                  "MAPSEC_SILPH_CO": "CHOWMAHALLA HQ",
-                  "MAPSEC_POKEMON_MANSION": "HAUNTED STUDIO",
-                  "MAPSEC_SAFARI_ZONE": "LION SAFARI",
-                  "MAPSEC_POKEMON_LEAGUE": "DECCAN LEAGUE",
-                  "MAPSEC_ROCK_TUNNEL": "JUBILEE TUNNEL",
-                  "MAPSEC_POWER_PLANT": "BHEL PLANT",
-                  "MAPSEC_POKEMON_TOWER": "OLD SCIENCE BLDG",
+              name_swaps = {
+                  "PALLET TOWN": "SECUNDERABAD",
+                  "VIRIDIAN CITY": "KHAIRATABAD",
+                  "PEWTER CITY": "GOLCONDA FORT",
+                  "CERULEAN CITY": "HUSSAIN SAGAR",
+                  "LAVENDER TOWN": "SCIENCE COLLEGE",
+                  "VERMILION CITY": "BEGUMPET",
+                  "CELADON CITY": "HITEC CITY",
+                  "FUCHSIA CITY": "NEHRU ZOO PARK",
+                  "CINNABAR ISLAND": "RAMOJI FILM CITY",
+                  "INDIGO PLATEAU": "FALAKNUMA PALACE",
+                  "SAFFRON CITY": "CHARMINAR",
+                  "ROUTE 1": "TANK BUND RD",
+                  "ROUTE 2": "NECKLACE ROAD",
+                  "ROUTE 3": "TOLICHOWKI RD",
+                  "ROUTE 4": "MEHDIPATNAM RD",
+                  "ROUTE 5": "AMEERPET LINK",
+                  "ROUTE 6": "PUNJAGUTTA RD",
+                  "ROUTE 7": "MADHAPUR ROAD",
+                  "ROUTE 8": "KOTI MAIN RD",
+                  "ROUTE 9": "UPPAL HIGHWAY",
+                  "ROUTE 10": "ECIL CROSS RD",
+                  "ROUTE 12": "PVNR EXPRESSWAY",
+                  "ROUTE 16": "GACHIBOWLI FLY",
+                  "ROUTE 17": "OUTER RING RD",
+                  "VIRIDIAN FOREST": "KBR PARK",
+                  "MT. MOON": "BANJARA HILLS",
+                  "S.S. ANNE": "SAGAR CRUISE",
+                  "ROCKET HIDEOUT": "KABZA DEN",
+                  "SILPH CO.": "CHOWMAHALLA HQ",
+                  "SAFARI ZONE": "LION SAFARI",
+                  "ROCK TUNNEL": "JUBILEE TUNNEL",
+                  "POWER PLANT": "BHEL PLANT",
               }
               with open(map_path, "r", encoding="utf-8") as f:
                   data = json.load(f)
               for sec in data.get("map_sections", []):
-                  if sec.get("id") in replacements:
-                      sec["name"] = replacements[sec["id"]]
+                  old_name = sec.get("name")
+                  if old_name in name_swaps:
+                      sec["name"] = name_swaps[old_name]
               with open(map_path, "w", encoding="utf-8") as f:
                   json.dump(data, f, indent=2)
-              print("[+] Map names patched.")
+              print("[+] Map names patched cleanly.")
 
-          # 2. PATCH HYDERABADI ITEMS
-          item_files = ["src/data/items.json", "src/data/items.h", "src/data/text/item_names.h"]
+          # 2. PATCH HYDERABADI ITEMS SAFELY
           item_swaps = {
-              '"POTION"': '"NIMBU PANI"',
-              '"SUPER POTION"': '"BADAM MILK"',
-              '"HYPER POTION"': '"MUTTON MARAG"',
-              '"MAX POTION"': '"SHAHI HALEEM"',
-              '"FULL RESTORE"': '"KACCHI DUM"',
-              '"REVIVE"': '"KADAK CHAI"',
-              '"FRESH WATER"': '"IRANI CHAI"',
-              '"SODA POP"': '"GOLI SODA"',
-              '"LEMONADE"': '"QUBANI SWEET"',
-              '"MOOMOO MILK"': '"DUM BIRYANI"',
-              '"LAVA COOKIE"': '"OSMANIA BISC"',
-              '"TOWN MAP"': '"HYD CITY MAP"',
-              '"BICYCLE"': '"ACTIVA 6G"',
+              "POTION": "NIMBU PANI",
+              "SUPER POTION": "BADAM MILK",
+              "HYPER POTION": "MUTTON MARAG",
+              "MAX POTION": "SHAHI HALEEM",
+              "FULL RESTORE": "KACCHI DUM",
+              "REVIVE": "KADAK CHAI",
+              "FRESH WATER": "IRANI CHAI",
+              "SODA POP": "GOLI SODA",
+              "LEMONADE": "QUBANI SWEET",
+              "MOOMOO MILK": "DUM BIRYANI",
+              "LAVA COOKIE": "OSMANIA BISC",
+              "TOWN MAP": "HYD CITY MAP",
+              "BICYCLE": "ACTIVA 6G",
           }
-          for path in item_files:
-              if os.path.exists(path):
-                  with open(path, "r", encoding="utf-8") as f:
+          if os.path.exists("src/data/items.json"):
+              with open("src/data/items.json", "r", encoding="utf-8") as f:
+                  items_data = json.load(f)
+              for item in items_data.get("items", []):
+                  eng = item.get("english")
+                  if eng in item_swaps:
+                      item["english"] = item_swaps[eng]
+              with open("src/data/items.json", "w", encoding="utf-8") as f:
+                  json.dump(items_data, f, indent=2)
+              print("[+] Patched src/data/items.json")
+
+          for h_path in ["src/data/items.h", "src/data/text/item_names.h"]:
+              if os.path.exists(h_path):
+                  with open(h_path, "r", encoding="utf-8") as f:
                       txt = f.read()
                   for old, new in item_swaps.items():
-                      txt = txt.replace(old, new)
-                  with open(path, "w", encoding="utf-8") as f:
+                      txt = txt.replace(f'_("{old}")', f'_("{new}")')
+                  with open(h_path, "w", encoding="utf-8") as f:
                       f.write(txt)
-                  print(f"[+] Patched items in {path}")
+                  print(f"[+] Patched {h_path}")
 
-          # 3. INSTANT LINE-BY-LINE DIALOGUE PATCHER (ZERO REGEX BACKTRACKING)
+          # 3. LINE-BY-LINE DIALOGUE PATCHER
           def patch_labels(filepath, label_dict):
               if not os.path.exists(filepath):
                   return
@@ -284,15 +292,15 @@ jobs:
                   "Yeh lo SAGAR BADGE, haq se jeete!$"
               ]
           })
-
-          print("[*] All Hyderabad patches applied in <1 second!")
           EOF
 
       - name: Build Tools First
         run: make tools -j$(nproc)
 
-      - name: Compile Only FireRed GBA ROM
-        run: make firered -j$(nproc) COMPARE=0
+      - name: Compile Only FireRed GBA ROM (Disable Vanilla Checksum Lock)
+        run: |
+          sed -i 's/sha1sum -c/true #/g' Makefile
+          make firered -j$(nproc) compare=0 COMPARE=0
 
       - name: Upload Playable GBA ROM
         uses: actions/upload-artifact@v4
